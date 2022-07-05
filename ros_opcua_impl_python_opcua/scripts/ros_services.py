@@ -181,9 +181,11 @@ def refresh_services(namespace_ros, server, servicesdict, idx, services_object_o
     for service_name_ros in rosservices:
         try:
             if service_name_ros not in servicesdict or servicesdict[service_name_ros] is None:
+
                 service = OpcUaROSService(server, services_object_opc, idx, service_name_ros,
                                           rosservice.get_service_class_by_name(service_name_ros))
                 servicesdict[service_name_ros] = service
+                
         except (rosservice.ROSServiceException, rosservice.ROSServiceIOException) as e:
             try:
                 rospy.logerr("Error when trying to refresh services", e)
