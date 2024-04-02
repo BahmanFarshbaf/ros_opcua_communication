@@ -1,35 +1,13 @@
 #!/usr/bin/env python
 import sys
 import time
-import ast
-
 import rosgraph
 import rosnode
 import rospy
 from opcua import Server, ua
-
-import ros_services
-import ros_topics
-
-from io_controllers_msgs.msg import *
-from control_msgs.msg import *
-from trajectory_msgs import *
-from std_msgs.msg import *
-
-# Returns the hierachy as one string from the first remaining part on.
-sub_lst = []
-
-def nextname(hierachy, index_of_last_processed):
-    try:
-        output = ""
-        counter = index_of_last_processed + 1
-        while counter < len(hierachy):
-            output += hierachy[counter]
-            counter += 1
-        return output
-    except Exception as e:
-        rospy.logerr("Error encountered ", e)
-
+from opcua.ua import object_ids as o_ids
+from datetime import datetime
+from threading import Timer
 
 def own_rosnode_cleanup():
     pinged, unpinged = rosnode.rosnode_ping_all()
@@ -38,120 +16,123 @@ def own_rosnode_cleanup():
         # noinspection PyTypeChecker
         rosnode.cleanup_master_blacklist(master, unpinged)
 
+class SubHandler(object):
+    def datachange_notification(self, node, val, data):
+        print(node.get_display_name().Text, val)
 
 class ROSServer:
     def __init__(self):
-        self.namespace_ros = rospy.get_param("/rosopcua/namespace")
-        self.topicsDict = {}
-        self.servicesDict = {}
-        self.actionsDict = {}
-        rospy.init_node("rosopcua")
+        self.namespace_ros = rospy.get_param("/opcua/namespace")
+        rospy.init_node("opcua")
         self.server = Server()
-        # self.server.set_endpoint("opc.tcp://192.168.1.100:21554/")
-        with open('/data/workcell_smp_irb2600/config/vetron_opcua_server.txt', 'r') as txt:
+        with open('/data/workcell_smp_irb2600/config/irs_opcua_server.txt', 'r') as txt:
             txtfile = txt.read()
         self.server.set_endpoint(txtfile)
-        self.server.set_server_name("ROS OPCUA Server")
+        self.server.import_xml("/data/workcell_smp_irb2600/config/irs_opcua_nodes.xml")
         self.server.start()
-        self.method_map = None
-        # self.INPUT_TOPIC="INPUT"
-        # self.OUTPUT_TOPIC="OUTPUT"
-        # setup our own namespaces, this is expected
-        uri_topics = "http://ros.org/topics"
-        # two different namespaces to make getting the correct node easier for get_node (otherwise had object for service and topic with same name
-        uri_services = "http://ros.org/services"
-        uri_actions = "http://ros.org/actions"
-        idx_topics = self.server.register_namespace(uri_topics)
-        idx_services = self.server.register_namespace(uri_services)
-        idx_actions = self.server.register_namespace(uri_actions)
-        # get Objects node, this is where we should put our custom stuff
-        objects = self.server.get_objects_node()
 
-        # one object per type we are watching
-        topics_object = objects.add_object(idx_topics, "ROS-Topics")
-        services_object = objects.add_object(idx_services, "ROS-Services")
-        actions_object = objects.add_object(idx_actions, "ROS_Actions")
+        handler = SubHandler()
+        sub = self.server.create_subscription(100, handler)
 
-        # while not rospy.is_shutdown():
+        varnodeids = range(6001, 6090)
+        nodelist = []
+        for nd in varnodeids:
+            if nd not in range(6005, 6012):
+                var = self.server.get_node('ns=2;i=' + str(nd))
+                nodelist.append(var)
+            dtype = var.get_data_type()
+            if dtype.NamespaceIndex == 0 and dtype.Identifier in o_ids.ObjectIdNames:
+                dtype_name = o_ids.ObjectIdNames[dtype.Identifier]
+                set_node_type(dtype_name, var)
+            else:
+                dtype_name = dtype.to_string()
+                rank = var.get_value_rank()
+            
+            self.server.get_node('ns=2;i=' + str(nd)).set_writable()
 
-        all_topics_lst = self.get_all_topics()
+        del nodelist[3]
+        del nodelist[6]
 
-        # ros_topics starts a lot of publisher/subscribers, might slow everything down quite a bit.
-        ros_services.refresh_services(self.namespace_ros, self, self.servicesDict, idx_services, services_object)
-        self.method_map = ros_topics.refresh_topics_and_actions(self.namespace_ros, self, self.topicsDict, self.actionsDict,
-                                                                idx_topics, idx_actions, topics_object, actions_object, all_topics_lst)
-        # hh
-        for key in self.method_map:
-            for topic_name, topic_type in all_topics_lst:
-                if topic_name in key:
-                    leaf_node = self.server.get_node(key)
-                    sub_lst.append(leaf_node)                 
-        try:
-            sub = self.server.create_subscription(period=1, handler=self)
-            handle = sub.subscribe_data_change(sub_lst)
+        rt = RepeatedTimer(30, timeupdater, self.server)
 
-        except:
-            print("Can not create_subscription for this object:", key)
+        self.server.get_node('ns=2;i=6014').set_value(ua.Variant(1, ua.VariantType.UInt16))
+        self.server.get_node('ns=2;i=6013').set_value(ua.Variant('1.0.0', ua.VariantType.String))
+        self.server.get_node('ns=2;i=6012').set_value(ua.Variant('VetronSewingRobot', ua.VariantType.String))
+
+        alarms = self.server.get_node('ns=2;i=6072')
+        alarms.set_value(ua.Variant([0,0,0,0], ua.VariantType.UInt16))
+        alarms.set_value_rank(1)
+        alarms.set_array_dimensions([0])
+
+        sub.subscribe_data_change(nodelist)
 
         print("ROS OPCUA Server initialized.")
         while not rospy.is_shutdown():
             rospy.spin()
-       
-        #time.sleep(0)  # used to be 60
+            
+        time.sleep(0)  # used to be 60
 
         self.server.stop()
+        rt.stop()
         print("ROS OPCUA Server stopped.")
         quit()
- 
-    def get_all_topics(self):
-        # function to provide topics
-        ros_topics = rospy.get_param("/rosopcua/topics_glob")
-        all_ros_topics = ast.literal_eval(ros_topics)
 
-        return all_ros_topics
+def timeupdater(serverself):
+    serverself.get_node(ua.NodeId.from_string('ns=2;i=6015')).set_value(ua.Variant(datetime.utcnow(), ua.VariantType.DateTime))
 
-    # cb
-
-    def datachange_notification(self, node, val, data):
-        str = node.nodeid.to_string()
-        method_str = self.method_map[str]
-        method = self.server.get_node(method_str)
-        node.call_method(method)   
-
-    def find_service_node_with_same_name(self, name, idx):
-        print("Reached ServiceCheck for name " + name)
-        for service in self.servicesDict:
-            print(
-                "Found name: " + str(self.servicesDict[service].parent.nodeid.Identifier))
-            if self.servicesDict[service].parent.nodeid.Identifier == name:
-                print("Found match for name: " + name)
-                return self.servicesDict[service].parent
+def set_node_type(dtype_name, var):
+    if dtype_name == 'Boolean':
+        dv = ua.Variant(False, ua.VariantType.Boolean)
+    elif dtype_name == 'DateTime':
+        dv = ua.Variant(datetime.utcfromtimestamp(0.0), ua.VariantType.DateTime)
+    elif dtype_name == 'Int16':
+        dv = ua.Variant(0, ua.VariantType.Int16)
+    elif dtype_name == 'UInt16':
+        dv = ua.Variant(0, ua.VariantType.UInt16)
+    elif dtype_name == 'Int32':
+        dv = ua.Variant(0, ua.VariantType.Int32)
+    elif dtype_name == 'UInt32':
+        dv = ua.Variant(0, ua.VariantType.UInt32)
+    elif dtype_name == 'Int64':
+        dv = ua.Variant(0, ua.VariantType.Int64)
+    elif dtype_name == 'UInt64':
+        dv = ua.Variant(0, ua.VariantType.UInt64)
+    elif dtype_name == 'Float' or dtype_name == 'Float32' or dtype_name == 'Float64':
+        dv = ua.Variant(0.0, ua.VariantType.Float)
+    elif dtype_name == 'String':
+        dv = ua.Variant('', ua.VariantType.String)
+    else:
+        rospy.logerr("Can't create node with type" + str(dtype_name))
         return None
+    return var.set_value(dv)
 
-    def find_topics_node_with_same_name(self, name, idx):
-        # print("Reached TopicCheck for name " + name)
-        for topic in self.topicsDict:
-            # print(
-            #     "Found name: " + str(self.topicsDict[topic].parent.nodeid.Identifier))
-            if self.topicsDict[topic].parent.nodeid.Identifier == name:
-                # print("Found match for name: " + name)
-                return self.topicsDict[topic].parent
-        return None
+class RepeatedTimer(object):
+    def __init__(self, interval, function, *args, **kwargs):
+        self._timer     = None
+        self.interval   = interval
+        self.function   = function
+        self.args       = args
+        self.kwargs     = kwargs
+        self.is_running = False
+        self.start()
 
-    def find_action_node_with_same_name(self, name, idx):
-        print("Reached ActionCheck for name " + name)
-        for topic in self.actionsDict:
-            print(
-                "Found name: " + str(self.actionsDict[topic].parent.nodeid.Identifier))
-            if self.actionsDict[topic].parent.nodeid.Identifier == name:
-                print("Found match for name: " + name)
-                return self.actionsDict[topic].parent
-        return None
+    def _run(self):
+        self.is_running = False
+        self.start()
+        self.function(*self.args, **self.kwargs)
 
+    def start(self):
+        if not self.is_running:
+            self._timer = Timer(self.interval, self._run)
+            self._timer.start()
+            self.is_running = True
+
+    def stop(self):
+        self._timer.cancel()
+        self.is_running = False
 
 def main(args):
     rosserver = ROSServer()
-
 
 if __name__ == "__main__":
     main(sys.argv)
