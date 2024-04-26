@@ -36,33 +36,24 @@ class ROSServer:
 
         varnodeids = range(6001, 6090)
         nodelist = []
-        for nd in varnodeids:
-            if nd not in range(6005, 6012):
-                var = self.server.get_node('ns=2;i=' + str(nd))
-                nodelist.append(var)
-            dtype = var.get_data_type()
-            if dtype.NamespaceIndex == 0 and dtype.Identifier in o_ids.ObjectIdNames:
-                dtype_name = o_ids.ObjectIdNames[dtype.Identifier]
-                set_node_type(dtype_name, var)
-            else:
-                dtype_name = dtype.to_string()
-                rank = var.get_value_rank()
-            
-            self.server.get_node('ns=2;i=' + str(nd)).set_writable()
-
-        del nodelist[3]
-        del nodelist[6]
-
-        rt = RepeatedTimer(30, timeupdater, self.server)
-
-        self.server.get_node('ns=2;i=6014').set_value(ua.Variant(1, ua.VariantType.UInt16))
-        self.server.get_node('ns=2;i=6013').set_value(ua.Variant('1.0.0', ua.VariantType.String))
-        self.server.get_node('ns=2;i=6012').set_value(ua.Variant('VetronSewingRobot', ua.VariantType.String))
-
-        alarms = self.server.get_node('ns=2;i=6072')
-        alarms.set_value(ua.Variant([0,0,0,0], ua.VariantType.UInt16))
-        alarms.set_value_rank(1)
-        alarms.set_array_dimensions([0])
+        try:
+            for nd in varnodeids:
+                if nd not in range(6005, 6012):
+                    var = self.server.get_node('ns=2;i=' + str(nd))
+                    nodelist.append(var)
+                dtype = var.get_data_type()
+                if dtype.NamespaceIndex == 0 and dtype.Identifier in o_ids.ObjectIdNames:
+                    dtype_name = o_ids.ObjectIdNames[dtype.Identifier]
+                    set_node_type(dtype_name, var)
+                else:
+                    dtype_name = dtype.to_string()
+                    rank = var.get_value_rank()
+                self.server.get_node('ns=2;i=' + str(nd)).set_writable()
+            del nodelist[3]
+            del nodelist[6]
+            rt = RepeatedTimer(30, timeupdater, self.server)
+        except:
+            None
 
         sub.subscribe_data_change(nodelist)
 
@@ -81,28 +72,9 @@ def timeupdater(serverself):
     serverself.get_node(ua.NodeId.from_string('ns=2;i=6015')).set_value(ua.Variant(datetime.utcnow(), ua.VariantType.DateTime))
 
 def set_node_type(dtype_name, var):
-    if dtype_name == 'Boolean':
-        dv = ua.Variant(False, ua.VariantType.Boolean)
-    elif dtype_name == 'DateTime':
+    if dtype_name == 'DateTime':
         dv = ua.Variant(datetime.utcfromtimestamp(0.0), ua.VariantType.DateTime)
-    elif dtype_name == 'Int16':
-        dv = ua.Variant(0, ua.VariantType.Int16)
-    elif dtype_name == 'UInt16':
-        dv = ua.Variant(0, ua.VariantType.UInt16)
-    elif dtype_name == 'Int32':
-        dv = ua.Variant(0, ua.VariantType.Int32)
-    elif dtype_name == 'UInt32':
-        dv = ua.Variant(0, ua.VariantType.UInt32)
-    elif dtype_name == 'Int64':
-        dv = ua.Variant(0, ua.VariantType.Int64)
-    elif dtype_name == 'UInt64':
-        dv = ua.Variant(0, ua.VariantType.UInt64)
-    elif dtype_name == 'Float' or dtype_name == 'Float32' or dtype_name == 'Float64':
-        dv = ua.Variant(0.0, ua.VariantType.Float)
-    elif dtype_name == 'String':
-        dv = ua.Variant('', ua.VariantType.String)
     else:
-        rospy.logerr("Can't create node with type" + str(dtype_name))
         return None
     return var.set_value(dv)
 
