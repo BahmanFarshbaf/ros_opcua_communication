@@ -72,19 +72,28 @@ def timeupdater(serverself):
     serverself.get_node(ua.NodeId.from_string('ns=2;i=6015')).set_value(ua.Variant(datetime.utcnow(), ua.VariantType.DateTime))
 
 def set_node_type(dtype_name, var):
-    if dtype_name == 'DateTime':
-        dv = ua.Variant(datetime.utcfromtimestamp(0.0), ua.VariantType.DateTime)
-    elif type_name == 'bool':
+    if dtype_name == 'Boolean':
         dv = ua.Variant(False, ua.VariantType.Boolean)
-    elif type_name == 'uint16':
+    elif dtype_name == 'DateTime':
+        dv = ua.Variant(datetime.utcfromtimestamp(0.0), ua.VariantType.DateTime)
+    elif dtype_name == 'Int16':
+        dv = ua.Variant(0, ua.VariantType.Int16)
+    elif dtype_name == 'UInt16':
         dv = ua.Variant(0, ua.VariantType.UInt16)
-    elif type_name == 'int32':
+    elif dtype_name == 'Int32':
         dv = ua.Variant(0, ua.VariantType.Int32)
-    elif type_name == 'uint32':
+    elif dtype_name == 'UInt32':
         dv = ua.Variant(0, ua.VariantType.UInt32)
-    elif type_name == 'string':
+    elif dtype_name == 'Int64':
+        dv = ua.Variant(0, ua.VariantType.Int64)
+    elif dtype_name == 'UInt64':
+        dv = ua.Variant(0, ua.VariantType.UInt64)
+    elif dtype_name == 'Float' or dtype_name == 'Float32' or dtype_name == 'Float64':
+        dv = ua.Variant(0.0, ua.VariantType.Float)
+    elif dtype_name == 'String':
         dv = ua.Variant('', ua.VariantType.String)
     else:
+        rospy.logerr("Can't create node with type" + str(dtype_name))
         return None
     return var.set_value(dv)
 
