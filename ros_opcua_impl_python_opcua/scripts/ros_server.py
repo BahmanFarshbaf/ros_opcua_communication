@@ -74,6 +74,16 @@ def timeupdater(serverself):
 def set_node_type(dtype_name, var):
     if dtype_name == 'DateTime':
         dv = ua.Variant(datetime.utcfromtimestamp(0.0), ua.VariantType.DateTime)
+    elif type_name == 'bool':
+        dv = ua.Variant(False, ua.VariantType.Boolean)
+    elif type_name == 'uint16':
+        dv = ua.Variant(0, ua.VariantType.UInt16)
+    elif type_name == 'int32':
+        dv = ua.Variant(0, ua.VariantType.Int32)
+    elif type_name == 'uint32':
+        dv = ua.Variant(0, ua.VariantType.UInt32)
+    elif type_name == 'string':
+        dv = ua.Variant('', ua.VariantType.String)
     else:
         return None
     return var.set_value(dv)
