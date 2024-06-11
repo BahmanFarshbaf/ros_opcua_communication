@@ -34,7 +34,7 @@ class ROSServer:
         handler = SubHandler()
         sub = self.server.create_subscription(100, handler)
 
-        varnodeids = range(6001, 6090)
+        varnodeids = range(6001, 6110)
         nodelist = []
         try:
             for nd in varnodeids:
