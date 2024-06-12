@@ -34,27 +34,25 @@ class ROSServer:
         handler = SubHandler()
         sub = self.server.create_subscription(100, handler)
 
-        varnodeids = range(6001, 6110)
         nodelist = []
         try:
-            for nd in varnodeids:
-                if nd not in range(6005, 6012):
+            for nd in range(6001, 6103):
                     var = self.server.get_node('ns=2;i=' + str(nd))
                     nodelist.append(var)
-                dtype = var.get_data_type()
-                if dtype.NamespaceIndex == 0 and dtype.Identifier in o_ids.ObjectIdNames:
-                    dtype_name = o_ids.ObjectIdNames[dtype.Identifier]
-                    set_node_type(dtype_name, var)
-                else:
-                    dtype_name = dtype.to_string()
-                    rank = var.get_value_rank()
-                self.server.get_node('ns=2;i=' + str(nd)).set_writable()
-            del nodelist[3]
-            del nodelist[6]
-            rt = RepeatedTimer(30, timeupdater, self.server)
+                    dtype = var.get_data_type()
+                    if dtype.NamespaceIndex == 0 and dtype.Identifier in o_ids.ObjectIdNames:
+                        dtype_name = o_ids.ObjectIdNames[dtype.Identifier]
+                        set_node_type(dtype_name, var)
+                    else:
+                        dtype_name = dtype.to_string()
+                        rank = var.get_value_rank()
+                    self.server.get_node('ns=2;i=' + str(nd)).set_writable()
         except:
-            None
+            print('Subscribed on ' + str(nd - 6001) + ' Nodes!')
+        del nodelist[3] #client time
+        del nodelist[6] #server time
 
+        rt = RepeatedTimer(30, timeupdater, self.server)
         sub.subscribe_data_change(nodelist)
 
         print("ROS OPCUA Server initialized.")
@@ -69,31 +67,12 @@ class ROSServer:
         quit()
 
 def timeupdater(serverself):
-    serverself.get_node(ua.NodeId.from_string('ns=2;i=6015')).set_value(ua.Variant(datetime.utcnow(), ua.VariantType.DateTime))
+    serverself.get_node('ns=2;i=6008').set_value(ua.Variant(datetime.utcnow(), ua.VariantType.DateTime))
 
 def set_node_type(dtype_name, var):
-    if dtype_name == 'Boolean':
-        dv = ua.Variant(False, ua.VariantType.Boolean)
-    elif dtype_name == 'DateTime':
+    if dtype_name == 'DateTime':
         dv = ua.Variant(datetime.utcfromtimestamp(0.0), ua.VariantType.DateTime)
-    elif dtype_name == 'Int16':
-        dv = ua.Variant(0, ua.VariantType.Int16)
-    elif dtype_name == 'UInt16':
-        dv = ua.Variant(0, ua.VariantType.UInt16)
-    elif dtype_name == 'Int32':
-        dv = ua.Variant(0, ua.VariantType.Int32)
-    elif dtype_name == 'UInt32':
-        dv = ua.Variant(0, ua.VariantType.UInt32)
-    elif dtype_name == 'Int64':
-        dv = ua.Variant(0, ua.VariantType.Int64)
-    elif dtype_name == 'UInt64':
-        dv = ua.Variant(0, ua.VariantType.UInt64)
-    elif dtype_name == 'Float' or dtype_name == 'Float32' or dtype_name == 'Float64':
-        dv = ua.Variant(0.0, ua.VariantType.Float)
-    elif dtype_name == 'String':
-        dv = ua.Variant('', ua.VariantType.String)
     else:
-        rospy.logerr("Can't create node with type" + str(dtype_name))
         return None
     return var.set_value(dv)
 
