@@ -36,7 +36,7 @@ class ROSServer:
 
         nodelist = []
         try:
-            for nd in range(6001, 6103):
+            for nd in range(6001, 6119):
                     var = self.server.get_node('ns=2;i=' + str(nd))
                     nodelist.append(var)
                     dtype = var.get_data_type()
