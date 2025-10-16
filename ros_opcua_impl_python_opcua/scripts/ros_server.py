@@ -28,7 +28,7 @@ class ROSServer:
         rospy.init_node("opcua")
         self.server = Server()
         
-        with open('/data/workcell_smp_irb22600/config/irs_opcua_server.txt', 'r') as txt:
+        with open('/data/workcell_smp_irb2600/config/irs_opcua_server.txt', 'r') as txt:
             txtfile = txt.read()
             
         self.server.set_endpoint(txtfile)
