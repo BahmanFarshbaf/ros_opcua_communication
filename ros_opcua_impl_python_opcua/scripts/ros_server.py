@@ -24,7 +24,7 @@ class SubHandler(object):
 
 class ROSServer:
     def __init__(self):
-        self.namespace_ros = rospy.get_param("/opcua/namespace")
+        # The line getting the ROS param is now removed.
         rospy.init_node("opcua")
         self.server = Server()
         
@@ -35,25 +35,24 @@ class ROSServer:
         self.server.import_xml("/data/workcell_smp_irb2600/config/irs_opcua_nodes_string_ids.xml")
         self.server.start()
         
-        self.idx = self.server.get_namespace_index(self.namespace_ros)
-        # FIX: Replaced f-string with .format() for Python 2 compatibility
+        # --- CHANGE HERE ---
+        # Instead of getting a parameter, we hardcode the exact namespace URI from your XML file.
+        namespace_uri = "https://vetrontypical-europe.com/OPCUA/"
+        self.idx = self.server.get_namespace_index(namespace_uri)
+        
         print("OPC UA Server using namespace index: {}".format(self.idx))
 
         handler = SubHandler()
         sub = self.server.create_subscription(100, handler)
         
         # --- Browse for all variable nodes ---
-        
-        # FIX: Replaced f-string
         root_node_id = "ns={};s=IRS_MES".format(self.idx)
         root_node = self.server.get_node(root_node_id)
         
         all_variable_nodes = []
         self.browse_and_collect_vars(root_node, all_variable_nodes)
-        # FIX: Replaced f-string
         print("Found {} total variable nodes.".format(len(all_variable_nodes)))
 
-        # FIX: Replaced f-strings in the list definition
         nodes_to_exclude = [
             "ns={};s=IRS_MES.System.Client.SystemTimeUTC".format(self.idx),
             "ns={};s=IRS_MES.System.Server.SystemTimeUTC".format(self.idx)
@@ -67,11 +66,9 @@ class ROSServer:
         for var in nodelist:
             var.set_writable()
 
-        # FIX: Replaced f-string
         print("Subscribing to data changes on {} nodes after exclusions.".format(len(nodelist)))
         sub.subscribe_data_change(nodelist)
         
-        # FIX: Replaced f-string to get server time node
         server_time_node_id = "ns={};s=IRS_MES.System.Server.SystemTimeUTC".format(self.idx)
         server_time_node = self.server.get_node(server_time_node_id)
         rt = RepeatedTimer(30, timeupdater, server_time_node)
@@ -88,10 +85,6 @@ class ROSServer:
         quit()
 
     def browse_and_collect_vars(self, parent_node, collection_list):
-        """
-        Recursively browses from a parent node, finds all child nodes of type
-        UAVariable, and adds them to the collection_list.
-        """
         for child_node in parent_node.get_children():
             if child_node.get_node_class() == ua.NodeClass.Variable:
                 collection_list.append(child_node)
@@ -99,10 +92,8 @@ class ROSServer:
 
 
 def timeupdater(node_to_update):
-    """Updates the timestamp on the given server time node."""
     node_to_update.set_value(ua.Variant(datetime.utcnow(), ua.VariantType.DateTime))
 
-# This function remains unchanged
 def set_node_type(dtype_name, var):
     if dtype_name == 'DateTime':
         dv = ua.Variant(datetime.utcfromtimestamp(0.0), ua.VariantType.DateTime)
@@ -110,7 +101,6 @@ def set_node_type(dtype_name, var):
         return None
     return var.set_value(dv)
 
-# This class remains unchanged
 class RepeatedTimer(object):
     def __init__(self, interval, function, *args, **kwargs):
         self._timer     = None
